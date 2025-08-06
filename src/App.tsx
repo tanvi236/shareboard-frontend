@@ -4,76 +4,69 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AuthPage from './components/Auth/AuthPage';
 import Dashboard from './components/Dashboard/Dashboard';
-import { GlobalStyle } from './styles/GlobalStyles';
 import BoardView from './components/Board/BoardView';
 import InvitationAccept from './components/Invitation/InvitationAccept';
+import GlobalStyles from './styles/GlobalStyles';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return <div>Loading...</div>;
   }
 
-  return isAuthenticated ? <>{children}</> : <Navigate to="/auth" replace />;
+  return user ? <>{children}</> : <Navigate to="/auth" replace />;
 };
 
-const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
-
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
-  return !isAuthenticated ? <>{children}</> : <Navigate to="/dashboard" replace />;
-};
-
-function AppRoutes() {
+const AppRoutes: React.FC = () => {
   return (
-    <Router>
+    <Router
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
       <Routes>
-        <Route 
-          path="/auth" 
-          element={
-            <PublicRoute>
-              <AuthPage />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/dashboard" 
+        <Route path="/auth" element={<AuthPage />} />
+        <Route path="/invitation/:token" element={<InvitationAccept />} />
+        <Route
+          path="/"
           element={
             <ProtectedRoute>
               <Dashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/board/:id" 
+        {/* Add the missing /dashboard route */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/board/:id"
           element={
             <ProtectedRoute>
               <BoardView />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route
-          path="/invitation/accept/:token"
-          element={<InvitationAccept />}
-        />
-
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        {/* Catch-all route for unmatched paths */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
-}
+};
 
-function App() {
+const App: React.FC = () => {
   return (
     <AuthProvider>
-      <GlobalStyle />
+      <GlobalStyles />
       <AppRoutes />
-      <Toaster 
+      <Toaster
         position="top-right"
         toastOptions={{
           duration: 4000,
@@ -85,6 +78,6 @@ function App() {
       />
     </AuthProvider>
   );
-}
+};
 
 export default App;

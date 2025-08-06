@@ -7,6 +7,7 @@ import { Board, CreateBoardData } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../services/api';
 import CreateBoardModal from './CreateBoardModal';
+import InvitationsList from './InvitationsList';
 import { Container, Button, Card, LoadingSpinner } from '../../styles/GlobalStyles';
 import toast from 'react-hot-toast';
 
@@ -124,6 +125,22 @@ const PrivacyBadge = styled.span<{ isPublic: boolean }>`
   font-weight: 500;
 `;
 
+const CollaboratorBadge = styled.span`
+  background: #48bb78;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+`;
+
+const BadgeContainer = styled.div`
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+`;
+
 const EmptyState = styled.div`
   text-align: center;
   padding: 80px 20px;
@@ -147,6 +164,14 @@ const LoadingContainer = styled.div`
   height: 200px;
 `;
 
+const SectionDivider = styled.div`
+  margin: 48px 0;
+`;
+
+const BoardsSection = styled.div`
+  margin-top: 24px;
+`;
+
 const Dashboard: React.FC = () => {
   const [boards, setBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,6 +181,17 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     fetchBoards();
+    
+    // Listen for board updates (when invitation is accepted)
+    const handleBoardsUpdated = () => {
+      fetchBoards();
+    };
+    
+    window.addEventListener('boardsUpdated', handleBoardsUpdated);
+    
+    return () => {
+      window.removeEventListener('boardsUpdated', handleBoardsUpdated);
+    };
   }, []);
 
   const fetchBoards = async () => {
@@ -164,6 +200,7 @@ const Dashboard: React.FC = () => {
       const boardsData = await apiService.getBoards();
       setBoards(boardsData);
     } catch (error) {
+      console.error('Error fetching boards:', error);
       toast.error('Failed to load boards');
     } finally {
       setLoading(false);
@@ -177,6 +214,7 @@ const Dashboard: React.FC = () => {
       setShowCreateModal(false);
       toast.success('Board created successfully!');
     } catch (error) {
+      console.error('Error creating board:', error);
       toast.error('Failed to create board');
     }
   };
@@ -185,12 +223,24 @@ const Dashboard: React.FC = () => {
     navigate(`/board/${boardId}`);
   };
 
+  const handleInvitationAccepted = () => {
+    fetchBoards(); // Refresh the boards list when invitation is accepted
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  // Check if user is owner of the board
+  const isOwner = (board: Board) => {
+    if (typeof board.owner === 'object' && board.owner._id) {
+      return board.owner._id === user?._id;
+    }
+    return board.owner === user?._id;
   };
 
   if (loading) {
@@ -238,60 +288,80 @@ const Dashboard: React.FC = () => {
       
       <Container>
         <Content>
-          <HeaderSection>
-            <Title>My Boards</Title>
-            <Button onClick={() => setShowCreateModal(true)}>
-              <Plus size={16} />
-              Create Board
-            </Button>
-          </HeaderSection>
-
-          {boards.length === 0 ? (
-            <EmptyState>
-              <EmptyTitle>No boards yet</EmptyTitle>
-              <EmptyDescription>
-                Create your first board to start collaborating with your team
-              </EmptyDescription>
+          {/* Invitations List Section */}
+          <InvitationsList onInvitationAccepted={handleInvitationAccepted} />
+          
+          {/* Section Divider */}
+          <SectionDivider />
+          
+          {/* Boards Section */}
+          <BoardsSection>
+            <HeaderSection>
+              <Title>My Boards</Title>
               <Button onClick={() => setShowCreateModal(true)}>
                 <Plus size={16} />
-                Create Your First Board
+                Create Board
               </Button>
-            </EmptyState>
-          ) : (
-            <BoardsGrid>
-              {boards.map((board, index) => (
-                <motion.div
-                  key={board._id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.1 }}
-                >
-                  <BoardCard onClick={() => handleBoardClick(board._id)}>
-                    <BoardHeader>
-                      <div>
-                        <BoardTitle>{board.name}</BoardTitle>
-                        <PrivacyBadge isPublic={board.isPublic}>
-                          {board.isPublic ? 'Public' : 'Private'}
-                        </PrivacyBadge>
-                      </div>
-                      <Eye size={16} color="#718096" />
-                    </BoardHeader>
-                    
-                    <BoardMeta>
-                      <MetaItem>
-                        <Users size={14} />
-                        <span>{board.collaborators.length + 1} members</span>
-                      </MetaItem>
-                      <MetaItem>
-                        <Calendar size={14} />
-                        <span>{formatDate(board.createdAt)}</span>
-                      </MetaItem>
-                    </BoardMeta>
-                  </BoardCard>
-                </motion.div>
-              ))}
-            </BoardsGrid>
-          )}
+            </HeaderSection>
+
+            {boards.length === 0 ? (
+              <EmptyState>
+                <EmptyTitle>No boards yet</EmptyTitle>
+                <EmptyDescription>
+                  Create your first board to start collaborating with your team
+                </EmptyDescription>
+                <Button onClick={() => setShowCreateModal(true)}>
+                  <Plus size={16} />
+                  Create Your First Board
+                </Button>
+              </EmptyState>
+            ) : (
+              <BoardsGrid>
+                {boards.map((board, index) => (
+                  <motion.div
+                    key={board._id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.1 }}
+                  >
+                    <BoardCard onClick={() => handleBoardClick(board._id)}>
+                      <BoardHeader>
+                        <div>
+                          <BoardTitle>{board.name}</BoardTitle>
+                          <BadgeContainer>
+                            <PrivacyBadge isPublic={board.isPublic}>
+                              {board.isPublic ? 'Public' : 'Private'}
+                            </PrivacyBadge>
+                            {!isOwner(board) && (
+                              <CollaboratorBadge>
+                                Collaborator
+                              </CollaboratorBadge>
+                            )}
+                          </BadgeContainer>
+                        </div>
+                        <Eye size={16} color="#718096" />
+                      </BoardHeader>
+                      
+                      <BoardMeta>
+                        <MetaItem>
+                          <Users size={14} />
+                          <span>
+                            {Array.isArray(board.collaborators) 
+                              ? board.collaborators.length + 1 
+                              : 1} members
+                          </span>
+                        </MetaItem>
+                        <MetaItem>
+                          <Calendar size={14} />
+                          <span>{formatDate(board.createdAt)}</span>
+                        </MetaItem>
+                      </BoardMeta>
+                    </BoardCard>
+                  </motion.div>
+                ))}
+              </BoardsGrid>
+            )}
+          </BoardsSection>
         </Content>
       </Container>
 

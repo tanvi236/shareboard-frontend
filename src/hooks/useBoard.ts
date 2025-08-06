@@ -14,7 +14,7 @@ export const useBoard = (boardId: string | undefined) => {
 
     try {
       setLoading(true);
-      const boardData = await apiService.getBoard(boardId);
+      const boardData = await apiService.getBoardWithBlocks(boardId);
       setBoard(boardData);
       setBlocks(boardData.blocks || []);
       setError(null);

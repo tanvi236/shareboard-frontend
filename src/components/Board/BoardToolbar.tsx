@@ -40,7 +40,10 @@ const ZoomLevel = styled.span`
   text-align: center;
 `;
 
-const ToggleButton = styled(Button)<{ active: boolean }>`
+// Fixed: Added shouldForwardProp to prevent active prop from going to DOM
+const ToggleButton = styled(Button).withConfig({
+  shouldForwardProp: (prop) => prop !== 'active',
+})<{ active: boolean }>`
   background: ${props => props.active ? '#667eea' : '#f7fafc'};
   color: ${props => props.active ? 'white' : '#4a5568'};
   

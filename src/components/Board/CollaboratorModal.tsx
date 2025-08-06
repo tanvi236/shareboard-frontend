@@ -237,9 +237,11 @@ const CollaboratorModal: React.FC<CollaboratorModalProps> = ({ board, onClose })
               <CollaboratorInfo>
                 <CollaboratorName>
                   <Crown size={16} color="#667eea" />
-                  {board.owner.name}
+                  {typeof board.owner === 'object' && 'name' in board.owner ? board.owner.name : board.owner}
                 </CollaboratorName>
-                <CollaboratorEmail>{board.owner.email}</CollaboratorEmail>
+                <CollaboratorEmail>
+                  {typeof board.owner === 'object' && 'email' in board.owner ? board.owner.email : ''}
+                </CollaboratorEmail>
               </CollaboratorInfo>
               <RoleBadge isOwner={true}>Owner</RoleBadge>
             </CollaboratorItem>

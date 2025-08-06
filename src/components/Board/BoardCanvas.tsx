@@ -3,12 +3,15 @@ import { useDrop } from 'react-dnd';
 import styled from 'styled-components';
 import { Block, CreateBlockData } from '../../types';
 import { useBlocks } from '../../hooks/useBlocks';
-import apiService from '../../services/api';
 import DraggableBlock from './DraggableBlock';
 import BlockTypeMenu from './BlockTypeMenu';
 import toast from 'react-hot-toast';
+import api from '../../services/api';
 
-const CanvasContainer = styled.div<{ isOver: boolean }>`
+// Fixed: Added shouldForwardProp to prevent isOver prop from going to DOM
+const CanvasContainer = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== 'isOver',
+})<{ isOver: boolean }>`
   position: relative;
   flex: 1;
   background: 
@@ -20,7 +23,10 @@ const CanvasContainer = styled.div<{ isOver: boolean }>`
   background-color: ${props => props.isOver ? 'rgba(102, 126, 234, 0.05)' : 'transparent'};
 `;
 
-const AddBlockButton = styled.button<{ position: { x: number; y: number } }>`
+// Fixed: Added shouldForwardProp for position prop
+const AddBlockButton = styled.button.withConfig({
+  shouldForwardProp: (prop) => prop !== 'position',
+})<{ position: { x: number; y: number } }>`
   position: absolute;
   left: ${props => props.position.x - 20}px;
   top: ${props => props.position.y - 20}px;
@@ -96,6 +102,22 @@ const BoardCanvas: React.FC<BoardCanvasProps> = ({
     setShowTypeMenu(!showTypeMenu);
   }, [showTypeMenu]);
 
+  // Helper function to properly extract the block from API response
+  const extractBlockFromResponse = (response: any): Block | null => {
+    if (!response) return null;
+    
+    // Handle different possible response structures
+    if (response.data && response.data._id) {
+      return response.data;
+    } else if (response._id) {
+      return response;
+    } else if (response.block && response.block._id) {
+      return response.block;
+    }
+    
+    return null;
+  };
+
   const handleCreateBlock = useCallback(async (type: 'text' | 'image' | 'link') => {
     let content = '';
     
@@ -114,9 +136,9 @@ const BoardCanvas: React.FC<BoardCanvasProps> = ({
             toast.loading('Uploading image...', { id: 'image-upload' });
             
             // Upload image first
-            const uploadResult = await apiService.uploadImage(file);
+            const uploadResult = await api.uploadImage(file);
             content = uploadResult.url;
-            
+
             // Create block with uploaded image URL
             const blockData: CreateBlockData = {
               type,
@@ -128,12 +150,22 @@ const BoardCanvas: React.FC<BoardCanvasProps> = ({
               boardId
             };
 
-            const newBlock = await createBlock(blockData);
-            if (newBlock) {
+            console.log('Creating image block with data:', blockData);
+            const response = await createBlock(blockData);
+            console.log('Create block response:', response);
+            
+            // Extract the block properly from response
+            const newBlock = extractBlockFromResponse(response);
+            
+            if (newBlock && newBlock._id) {
+              console.log('Successfully created image block:', newBlock);
               onBlocksChange([...blocks, newBlock]);
+              toast.success('Image uploaded successfully!', { id: 'image-upload' });
+            } else {
+              console.error('Failed to create image block: Invalid response', response);
+              toast.error('Failed to create image block', { id: 'image-upload' });
             }
             
-            toast.success('Image uploaded successfully!', { id: 'image-upload' });
           } catch (error) {
             console.error('Image upload error:', error);
             toast.error('Failed to upload image', { id: 'image-upload' });
@@ -153,9 +185,8 @@ const BoardCanvas: React.FC<BoardCanvasProps> = ({
       text: 'Double-click to edit',
       link: 'https://example.com'
     };
-
     content = defaultContent[type as 'text' | 'link'];
-
+    
     const blockData: CreateBlockData = {
       type,
       content,
@@ -166,9 +197,25 @@ const BoardCanvas: React.FC<BoardCanvasProps> = ({
       boardId
     };
 
-    const newBlock = await createBlock(blockData);
-    if (newBlock) {
-      onBlocksChange([...blocks, newBlock]);
+    try {
+      console.log('Creating block with data:', blockData);
+      const response = await createBlock(blockData);
+      console.log('Create block response:', response);
+      
+      // Extract the block properly from response
+      const newBlock = extractBlockFromResponse(response);
+      
+      if (newBlock && newBlock._id) {
+        console.log('Successfully created block:', newBlock);
+        onBlocksChange([...blocks, newBlock]);
+        toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} block created!`);
+      } else {
+        console.error('Failed to create block: Invalid response', response);
+        toast.error('Failed to create block');
+      }
+    } catch (error) {
+      console.error('Failed to create block:', error);
+      toast.error('Failed to create block');
     }
     
     setShowAddButton(false);
@@ -176,28 +223,69 @@ const BoardCanvas: React.FC<BoardCanvasProps> = ({
   }, [addButtonPosition, boardId, blocks, createBlock, onBlocksChange]);
 
   const handleMoveBlock = useCallback(async (blockId: string, position: { x: number; y: number }) => {
-    // Optimistic update
-    onBlocksChange(blocks.map(block => 
-      block._id === blockId ? { ...block, position } : block
-    ));
+    try {
+      // Optimistic update
+      onBlocksChange(blocks.map(block => 
+        block._id === blockId ? { ...block, position } : block
+      ));
 
-    // Update on server
-    await moveBlock(blockId, position);
+      // Update on server
+      await moveBlock(blockId, position);
+    } catch (error) {
+      console.error('Failed to move block:', error);
+      toast.error('Failed to move block');
+    }
   }, [blocks, moveBlock, onBlocksChange]);
 
+  // Fixed: Improved handleUpdateBlock with proper response handling
   const handleUpdateBlock = useCallback(async (blockId: string, content: string) => {
-    const updatedBlock = await updateBlock(blockId, { content });
-    if (updatedBlock) {
-      onBlocksChange(blocks.map(block => 
-        block._id === blockId ? updatedBlock : block
-      ));
+    try {
+      console.log('Updating block:', blockId, 'with content:', content);
+      
+      // Optimistic update first - update UI immediately
+      const updatedBlocks = blocks.map(block => 
+        block._id === blockId ? { ...block, content } : block
+      );
+      onBlocksChange(updatedBlocks);
+      
+      // Update on server
+      const response = await updateBlock(blockId, { content });
+      console.log('Update block response:', response);
+      
+      // Extract the updated block properly from response
+      const updatedBlock = extractBlockFromResponse(response);
+      
+      if (updatedBlock && updatedBlock._id) {
+        console.log('Successfully updated block:', updatedBlock);
+        // Update with the server response to ensure consistency
+        onBlocksChange(blocks.map(block => 
+          block._id === blockId ? updatedBlock : block
+        ));
+        toast.success('Block updated successfully!');
+      } else {
+        console.error('Failed to update block: Invalid response', response);
+        // If server update failed, revert to original state
+        onBlocksChange(blocks);
+        toast.error('Failed to update block');
+      }
+    } catch (error) {
+      console.error('Failed to update block:', error);
+      // Revert optimistic update on error
+      onBlocksChange(blocks);
+      toast.error('Failed to update block');
     }
   }, [blocks, updateBlock, onBlocksChange]);
 
   const handleDeleteBlock = useCallback(async (blockId: string) => {
-    const success = await deleteBlock(blockId);
-    if (success) {
-      onBlocksChange(blocks.filter(block => block._id !== blockId));
+    try {
+      const success = await deleteBlock(blockId);
+      if (success) {
+        onBlocksChange(blocks.filter(block => block._id !== blockId));
+        toast.success('Block deleted');
+      }
+    } catch (error) {
+      console.error('Failed to delete block:', error);
+      toast.error('Failed to delete block');
     }
   }, [blocks, deleteBlock, onBlocksChange]);
 
@@ -208,18 +296,24 @@ const BoardCanvas: React.FC<BoardCanvasProps> = ({
     }
   }, []);
 
+  // Filter out any blocks without valid _id and generate safe keys
+  const validBlocks = blocks.filter(block => block && block._id);
+  
   return (
     <CanvasContainer
       ref={(node) => {
-        canvasRef.current = node;
-        drop(node);
+        if (node) {
+          // @ts-expect-error: canvasRef is readonly, but we need to assign for drag-and-drop
+          canvasRef.current = node;
+          drop(node);
+        }
       }}
       isOver={isOver}
       onClick={handleCanvasClick}
       onKeyDown={handleCanvasKeyDown}
       tabIndex={0}
     >
-      {blocks.map(block => (
+      {validBlocks.map((block) => (
         <DraggableBlock
           key={block._id}
           block={block}

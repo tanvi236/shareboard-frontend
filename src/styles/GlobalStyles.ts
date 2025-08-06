@@ -1,6 +1,7 @@
 import styled, { createGlobalStyle } from 'styled-components';
 
-export const GlobalStyle = createGlobalStyle`
+// Changed from named export to default export
+const GlobalStyles = createGlobalStyle`
   * {
     margin: 0;
     padding: 0;
@@ -160,3 +161,6 @@ export const LoadingSpinner = styled.div`
     100% { transform: rotate(360deg); }
   }
 `;
+
+// Export as default
+export default GlobalStyles;

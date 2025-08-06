@@ -72,34 +72,63 @@ class ApiService {
     }
   }
 
-  // Boards API Methods
+  // Boards API Methods - UPDATED VERSION (handles both owned and collaborated boards)
   async getBoards(): Promise<Board[]> {
     try {
-      const response = await this.api.get<Board[]>('/boards');
-      console.log(`Fetched ${response.data.length} boards`);
-      return response.data;
+      const response = await this.api.get('/boards');
+      
+      // Handle multiple possible response structures
+      let boards = [];
+      if (response.data.data && Array.isArray(response.data.data)) {
+        boards = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        boards = response.data;
+      } else {
+        console.warn('Unexpected response structure:', response.data);
+        boards = [];
+      }
+      
+      console.log(`Fetched ${boards.length} boards`);
+      return boards;
     } catch (error) {
       console.error('Error fetching boards:', error);
       throw error;
     }
   }
 
-  async getBoard(id: string): Promise<Board> {
+  // Updated to fetch board with blocks
+  async getBoard(id: string, includeBlocks: boolean = true): Promise<Board> {
     try {
-      const response = await this.api.get<Board>(`/boards/${id}`);
-      console.log('Fetched board:', response.data.name);
-      return response.data;
+      const queryParam = includeBlocks ? '?includeBlocks=true' : '';
+      const response = await this.api.get(`/boards/${id}${queryParam}`);
+      const board = response.data.data || response.data;
+      console.log('Fetched board with blocks:', board.name, 'Blocks count:', board.blocks?.length || 0);
+      return board;
     } catch (error) {
       console.error('Error fetching board:', error);
       throw error;
     }
   }
 
+  // Specific method to get board with all blocks
+  async getBoardWithBlocks(id: string): Promise<Board> {
+    try {
+      const response = await this.api.get(`/boards/${id}/blocks`);
+      const board = response.data.data || response.data;
+      console.log('Fetched board with blocks:', board.name, 'Blocks count:', board.blocks?.length || 0);
+      return board;
+    } catch (error) {
+      console.error('Error fetching board with blocks:', error);
+      throw error;
+    }
+  }
+
   async createBoard(data: CreateBoardData): Promise<Board> {
     try {
-      const response = await this.api.post<Board>('/boards', data);
-      console.log('Created board:', response.data.name);
-      return response.data;
+      const response = await this.api.post('/boards', data);
+      const board = response.data.data || response.data;
+      console.log('Created board:', board.name);
+      return board;
     } catch (error) {
       console.error('Error creating board:', error);
       throw error;
@@ -117,29 +146,73 @@ class ApiService {
   }
 
   // Blocks API Methods
-  async createBlock(data: CreateBlockData): Promise<Block> {
-    try {
-      console.log('Creating block:', data);
-      const response = await this.api.post<Block>('/blocks', data);
-      console.log('Created block:', response.data._id);
-      return response.data;
-    } catch (error) {
-      console.error('Error creating block:', error);
-      throw error;
-    }
-  }
+  // Update just these methods in your existing api.ts file
 
-  async updateBlock(blockId: string, data: UpdateBlockData): Promise<Block> {
-    try {
-      console.log('Updating block:', blockId, data);
-      const response = await this.api.patch<Block>(`/blocks/${blockId}`, data);
-      console.log('Updated block:', response.data._id);
-      return response.data;
-    } catch (error) {
-      console.error('Error updating block:', error);
-      throw error;
+async updateBlock(blockId: string, data: UpdateBlockData): Promise<Block> {
+  try {
+    console.log('Frontend sending update data:', JSON.stringify(data, null, 2));
+    
+    // Clean the data before sending to ensure no unwanted properties
+    const cleanData: any = {};
+    
+    if (data.content !== undefined) {
+      cleanData.content = data.content;
     }
+    
+    if (data.position) {
+      cleanData.position = {
+        x: Number(data.position.x) || 0,
+        y: Number(data.position.y) || 0
+        // dropEffect is intentionally omitted
+      };
+    }
+    
+    if (data.width !== undefined) {
+      cleanData.width = Number(data.width);
+    }
+    
+    if (data.height !== undefined) {
+      cleanData.height = Number(data.height);
+    }
+    
+    console.log('Sending cleaned data to backend:', cleanData);
+    
+    const response = await this.api.patch<Block>(`/blocks/${blockId}`, cleanData);
+    console.log('Update response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Frontend update error:', error);
+    console.error('Error response:', error.response?.data);
+    throw error;
   }
+}
+
+async createBlock(data: CreateBlockData): Promise<Block> {
+  try {
+    console.log('Creating block with data:', data);
+    
+    // Clean the data before sending
+    const cleanData = {
+      type: data.type,
+      content: data.content,
+      position: {
+        x: Number(data.position.x) || 0,
+        y: Number(data.position.y) || 0
+      },
+      boardId: data.boardId,
+      ...(data.width && { width: Number(data.width) }),
+      ...(data.height && { height: Number(data.height) })
+    };
+    
+    const response = await this.api.post<Block>('/blocks', cleanData);
+    console.log('Created block:', response.data._id);
+    return response.data;
+  } catch (error) {
+    console.error('Error creating block:', error);
+    throw error;
+  }
+}
+
 
   async deleteBlock(blockId: string): Promise<void> {
     try {
@@ -151,32 +224,94 @@ class ApiService {
       throw error;
     }
   }
-  // Add these methods to your ApiService class
 
-  // Invitations API
+  // Get blocks for a specific board
+  async getBoardBlocks(boardId: string): Promise<Block[]> {
+    try {
+      const response = await this.api.get(`/blocks?boardId=${boardId}`);
+      const blocks = response.data.data || response.data || [];
+      console.log(`Fetched ${blocks.length} blocks for board ${boardId}`);
+      return blocks;
+    } catch (error) {
+      console.error('Error fetching board blocks:', error);
+      throw error;
+    }
+  }
+
+  // Invitations API Methods - UPDATED TO USE POST WITH BODY
   async sendInvitation(boardId: string, email: string): Promise<any> {
-    const response = await this.api.post('/invitations/send', { boardId, email });
-    return response.data;
+    try {
+      const response = await this.api.post('/invitations/send', { boardId, email });
+      console.log('Invitation sent successfully');
+      return response.data;
+    } catch (error) {
+      console.error('Error sending invitation:', error);
+      throw error;
+    }
+  }
+
+  async getUserInvitations(email: string): Promise<any[]> {
+    try {
+      // Changed from GET with URL parameter to POST with body
+      const response = await this.api.post('/invitations/user/invitations', { email });
+      
+      // Handle multiple possible response structures
+      let invitations = [];
+      if (response.data.data && Array.isArray(response.data.data)) {
+        invitations = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        invitations = response.data;
+      } else {
+        console.warn('Unexpected invitations response structure:', response.data);
+        invitations = [];
+      }
+      
+      console.log(`Fetched ${invitations.length} invitations for ${email}`);
+      return invitations;
+    } catch (error) {
+      console.error('Error fetching user invitations:', error);
+      
+      // If 404, return empty array instead of throwing
+      if (error.response?.status === 404) {
+        console.log('No invitations endpoint found, returning empty array');
+        return [];
+      }
+      
+      throw error;
+    }
   }
 
   async getInvitationByToken(token: string): Promise<any> {
-    const response = await this.api.get(`/invitations/token/${token}`);
-    return response.data;
+    try {
+      const response = await this.api.get(`/invitations/token/${token}`);
+      console.log('Fetched invitation by token');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching invitation by token:', error);
+      throw error;
+    }
   }
 
   async acceptInvitation(token: string): Promise<any> {
-    const response = await this.api.post(`/invitations/accept/${token}`);
-    return response.data;
-  }
-
-  async getUserInvitations(email: string): Promise<any> {
-    const response = await this.api.get(`/invitations/user/${email}`);
-    return response.data;
+    try {
+      const response = await this.api.post(`/invitations/accept/${token}`);
+      console.log('Invitation accepted successfully');
+      return response.data;
+    } catch (error) {
+      console.error('Error accepting invitation:', error);
+      throw error;
+    }
   }
 
   async getBoardInvitations(boardId: string): Promise<any> {
-    const response = await this.api.get(`/invitations/board/${boardId}`);
-    return response.data;
+    try {
+      const response = await this.api.get(`/invitations/board/${boardId}`);
+      console.log(`Fetched invitations for board ${boardId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching board invitations:', error);
+      throw error;
+    }
   }
 
   // Image Upload API Method

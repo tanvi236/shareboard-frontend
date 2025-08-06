@@ -5,7 +5,10 @@ import { motion } from 'framer-motion';
 import { Trash2, Edit3, ExternalLink } from 'lucide-react';
 import { Block } from '../../types';
 
-const BlockContainer = styled(motion.div)<{ 
+// Fixed: Added shouldForwardProp to prevent DOM warnings
+const BlockContainer = styled(motion.div).withConfig({
+  shouldForwardProp: (prop) => !['isDragging', 'type', 'isEditing'].includes(prop),
+})<{ 
   isDragging: boolean; 
   type: string;
   isEditing: boolean;
@@ -60,7 +63,9 @@ const BlockActions = styled.div`
   }
 `;
 
-const ActionButton = styled.button<{ variant?: 'danger' }>`
+const ActionButton = styled.button.withConfig({
+  shouldForwardProp: (prop) => prop !== 'variant',
+})<{ variant?: 'danger' }>`
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -80,7 +85,9 @@ const ActionButton = styled.button<{ variant?: 'danger' }>`
   }
 `;
 
-const BlockContent = styled.div<{ isEditing: boolean }>`
+const BlockContent = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== 'isEditing',
+})<{ isEditing: boolean }>`
   width: 100%;
   min-height: 100px;
   font-size: 14px;
@@ -95,7 +102,9 @@ const BlockContent = styled.div<{ isEditing: boolean }>`
   word-wrap: break-word;
 `;
 
-const EditableTextarea = styled.textarea<{ isEditing: boolean }>`
+const EditableTextarea = styled.textarea.withConfig({
+  shouldForwardProp: (prop) => prop !== 'isEditing',
+})<{ isEditing: boolean }>`
   width: 100%;
   min-height: 100px;
   font-size: 14px;
@@ -135,7 +144,9 @@ const BlockLink = styled.a`
   }
 `;
 
-const TypeBadge = styled.div<{ type: string }>`
+const TypeBadge = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== 'type',
+})<{ type: string }>`
   position: absolute;
   top: 8px;
   left: 8px;
@@ -175,8 +186,26 @@ const DraggableBlock: React.FC<DraggableBlockProps> = ({
   onUpdate, 
   onDelete 
 }) => {
+  // Early return if block is undefined
+  if (!block) {
+    console.warn('DraggableBlock: Block is undefined');
+    return null;
+  }
+
+  // Safe access to position with default values
+  const safePosition = {
+    x: block.position?.x ?? 0,
+    y: block.position?.y ?? 0
+  };
+
+  // Safe access to dimensions with default values
+  const safeDimensions = {
+    width: block.width ?? 200,
+    height: block.height ?? 150
+  };
+
   const [isEditing, setIsEditing] = useState(false);
-  const [editContent, setEditContent] = useState(block.content);
+  const [editContent, setEditContent] = useState(block.content || '');
   const ref = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -218,7 +247,7 @@ const DraggableBlock: React.FC<DraggableBlockProps> = ({
       e.preventDefault();
       handleEditBlur();
     } else if (e.key === 'Escape') {
-      setEditContent(block.content);
+      setEditContent(block.content || '');
       setIsEditing(false);
     }
   }, [block.content, handleEditBlur]);
@@ -245,27 +274,28 @@ const DraggableBlock: React.FC<DraggableBlockProps> = ({
       case 'image':
         return (
           <BlockImage 
-            src={block.content} 
+            src={block.content || ''} 
             alt="Block content"
             onError={(e) => {
-              e.currentTarget.src = 'https://via.placeholder.com/200x150/e2e8f0/a0aec0?text=Invalid+Image';
+              // Fixed: Using placehold.co instead of via.placeholder.com
+              e.currentTarget.src = 'https://placehold.co/200x150/e2e8f0/a0aec0?text=Invalid+Image';
             }}
           />
         );
       case 'link':
         return (
           <BlockLink 
-            href={isValidUrl(block.content) ? block.content : '#'} 
+            href={isValidUrl(block.content || '') ? block.content : '#'} 
             target="_blank" 
             rel="noopener noreferrer"
-            onClick={(e) => !isValidUrl(block.content) && e.preventDefault()}
+            onClick={(e) => !isValidUrl(block.content || '') && e.preventDefault()}
           >
             <ExternalLink size={16} />
-            {block.content}
+            {block.content || 'Empty link'}
           </BlockLink>
         );
       default:
-        return block.content;
+        return block.content || 'Empty block';
     }
   };
 
@@ -276,10 +306,10 @@ const DraggableBlock: React.FC<DraggableBlockProps> = ({
       type={block.type}
       isEditing={isEditing}
       style={{
-        left: block.position.x,
-        top: block.position.y,
-        width: block.width,
-        height: block.height
+        left: safePosition.x,
+        top: safePosition.y,
+        width: safeDimensions.width,
+        height: safeDimensions.height
       }}
       onDoubleClick={handleDoubleClick}
       whileHover={{ scale: 1.02 }}

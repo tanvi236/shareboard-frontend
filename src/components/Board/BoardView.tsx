@@ -5,6 +5,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import styled from 'styled-components';
 import { ArrowLeft, Users, Share2, Settings } from 'lucide-react';
 import { useBoard } from '../../hooks/useBoard';
+import Header from '../Layout/Header';
 import BoardCanvas from './BoardCanvas';
 import BoardToolbar from './BoardToolbar';
 import CollaboratorModal from './CollaboratorModal';
@@ -105,14 +106,7 @@ const BoardView: React.FC = () => {
   if (loading) {
     return (
       <BoardContainer>
-        <BoardHeader>
-          <LeftSection>
-            <BackButton onClick={handleBackClick}>
-              <ArrowLeft size={20} />
-            </BackButton>
-            <BoardTitle>Loading...</BoardTitle>
-          </LeftSection>
-        </BoardHeader>
+        <Header title="Loading..." />
         <LoadingContainer>
           <LoadingSpinner />
         </LoadingContainer>
@@ -123,14 +117,7 @@ const BoardView: React.FC = () => {
   if (error || !board) {
     return (
       <BoardContainer>
-        <BoardHeader>
-          <LeftSection>
-            <BackButton onClick={handleBackClick}>
-              <ArrowLeft size={20} />
-            </BackButton>
-            <BoardTitle>Error</BoardTitle>
-          </LeftSection>
-        </BoardHeader>
+        <Header title="Error" />
         <ErrorContainer>
           <ErrorTitle>Board not found</ErrorTitle>
           <p>{error || 'The board you are looking for does not exist or you do not have access to it.'}</p>
